@@ -12,7 +12,7 @@ import random
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, filters,
@@ -37,6 +37,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
 )
 log = logging.getLogger("it-drill")
+
+# Главное меню (постоянная клавиатура)
+MAIN_MENU = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("🎯 Квиз"), KeyboardButton("🚨 Кейс")],
+        [KeyboardButton("📋 Темы"), KeyboardButton("📊 Уровни")],
+        [KeyboardButton("📈 Статистика"), KeyboardButton("❌ Отмена")],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
 
 
 # ------------------------------------------------------------------ данные
@@ -171,15 +182,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"В базе {len(quiz.questions)} вопросов по 9 темам "
         f"(Junior/Middle/Senior) и {len(quiz.cases)} разборов реальных "
         "инцидентов.\n\n"
-        "*Команды:*\n"
-        "/quiz — викторина (10 случайных вопросов)\n"
-        "/topic — выбрать тему\n"
-        "/level — выбрать уровень\n"
-        "/case — разбор инцидента\n"
-        "/stats — статистика базы\n"
-        "/cancel — сбросить сессию\n\n"
-        "Отвечай своими словами, потом сам оцениваешь себя по кнопкам.",
+        "Выбирай действие кнопками ниже 👇",
         parse_mode="Markdown",
+        reply_markup=MAIN_MENU,
     )
 
 
@@ -214,11 +219,30 @@ async def context_safe_reply(chat_id, text):
 APP = None
 
 
+async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий кнопок главного меню."""
+    text = update.message.text.strip()
+    if text == "🎯 Квиз":
+        await cmd_quiz(update, context)
+    elif text == "🚨 Кейс":
+        await cmd_case(update, context)
+    elif text == "📋 Темы":
+        await cmd_topic(update, context)
+    elif text == "📊 Уровни":
+        await cmd_level(update, context)
+    elif text == "📈 Статистика":
+        await cmd_stats(update, context)
+    elif text == "❌ Отмена":
+        await cmd_cancel(update, context)
+    else:
+        await handle_answer(update, context)
+
+
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     s = quiz.session(user_id)
     if not s or s["i"] >= len(s["q"]):
-        await update.message.reply_text("Нет активной сессии. /quiz чтобы начать.")
+        await update.message.reply_text("Нет активной сессии. Нажми «🎯 Квиз» или /quiz.")
         return
     q = quiz.submit(user_id, update.message.text)
     await update.message.reply_text(
@@ -376,7 +400,7 @@ def main():
     APP.add_handler(CommandHandler("help", cmd_start))
     APP.add_handler(CallbackQueryHandler(rate_callback, pattern=r"^rate:"))
     APP.add_handler(CallbackQueryHandler(button_callback, pattern=r"^(topic|level):"))
-    APP.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
+    APP.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_button))
     APP.add_error_handler(error_handler)
     APP.run_polling(drop_pending_updates=True)
 
