@@ -364,8 +364,7 @@ def main():
         print("❌ data/questions.json пуст или отсутствует.")
         raise SystemExit(1)
 
-    APP = (Application.builder().token(token)
-           .post_init(lambda a: print("🚀 Бот запущен")).build())
+    APP = Application.builder().token(token).build()
     APP.add_handler(CommandHandler("start", cmd_start))
     APP.add_handler(CommandHandler("quiz", cmd_quiz))
     APP.add_handler(CommandHandler("topic", cmd_topic))
