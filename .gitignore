@@ -2,9 +2,11 @@
 __pycache__/
 *.pyc
 venv/
+venv\
 
-# Секреты
+# Секреты и локальные настройки
 .env
+data/config.json
 
 # Данные сессий (создаётся ботом)
 data/progress.json
