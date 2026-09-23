@@ -174,6 +174,12 @@ def rating_keyboard():
     ]])
 
 
+# Кнопка «Не знаю» под каждым вопросом
+DONT_KNOW_KB = InlineKeyboardMarkup([[
+    InlineKeyboardButton("🤷 Не знаю", callback_data="answer:dontknow"),
+]])
+
+
 # ------------------------------------------------------------------ хендлеры
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,16 +210,16 @@ async def send_question(chat_id, user_id):
     if not q or not s:
         await send_summary(chat_id, user_id)
         return
-    await context_safe_reply(chat_id, q_text(q, s["i"] + 1, len(s["q"])))
+    await context_safe_reply(chat_id, q_text(q, s["i"] + 1, len(s["q"])),
+                             reply_markup=DONT_KNOW_KB)
 
 
-async def context_safe_reply(chat_id, text):
+async def context_safe_reply(chat_id, text, reply_markup=None):
     """Отправить сообщение в чат, безопасно для Markdown."""
-    from telegram.constants import ParseMode
     try:
-        await APP.bot.send_message(chat_id, text)
+        await APP.bot.send_message(chat_id, text, reply_markup=reply_markup)
     except Exception:
-        await APP.bot.send_message(chat_id, text[:4000])
+        await APP.bot.send_message(chat_id, text[:4000], reply_markup=reply_markup)
 
 
 APP = None
@@ -256,6 +262,31 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await send_question(update.effective_chat.id, user_id)
+
+
+async def dont_know_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка «Не знаю» под вопросом — засчитать ответ «не знаю»."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    s = quiz.session(user_id)
+    if not s or s["i"] >= len(s["q"]):
+        await query.edit_message_text("Нет активной сессии. Нажми «🎯 Квиз».")
+        return
+    i_before = s["i"]
+    q = quiz.submit(user_id, "не знаю")
+    await query.edit_message_reply_markup(reply_markup=None)  # убрать кнопку
+    await query.message.reply_text(
+        a_text(q, "не знаю", i_before + 1, len(s["q"]))
+    )
+    nxt = quiz.session(user_id)
+    if nxt["i"] >= len(nxt["q"]):
+        await query.message.reply_text(
+            "Как ты оцениваешь последний ответ?",
+            reply_markup=rating_keyboard(),
+        )
+    else:
+        await send_question(query.message.chat_id, user_id)
 
 
 async def rate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -398,6 +429,7 @@ def main():
     APP.add_handler(CommandHandler("stats", cmd_stats))
     APP.add_handler(CommandHandler("cancel", cmd_cancel))
     APP.add_handler(CommandHandler("help", cmd_start))
+    APP.add_handler(CallbackQueryHandler(dont_know_callback, pattern=r"^answer:dontknow$"))
     APP.add_handler(CallbackQueryHandler(rate_callback, pattern=r"^rate:"))
     APP.add_handler(CallbackQueryHandler(button_callback, pattern=r"^(topic|level):"))
     APP.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_button))
